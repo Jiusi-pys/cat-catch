@@ -52,9 +52,10 @@ async function readPlaylist(response) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-async function requireFiniteHls(url, headers, timeout, signal) {
+export async function requireFiniteHls(url, headers, timeout, signal) {
   const pending = [{ url, depth: 0, parents: new Set() }];
   const visited = new Set();
+  let maxDuration = 0;
   while (pending.length) {
     const item = pending.shift();
     if (visited.has(item.url)) continue;
@@ -77,7 +78,20 @@ async function requireFiniteHls(url, headers, timeout, signal) {
         if (uri) children.push(uri);
       }
     }
-    if (!children.length && !lines.includes('#EXT-X-ENDLIST')) throw new UsageError('Live HLS requires --duration');
+    if (!children.length) {
+      if (!lines.includes('#EXT-X-ENDLIST')) throw new UsageError('Live HLS requires --duration');
+      let duration = 0;
+      let longestSegment = 0;
+      for (const line of lines) {
+        if (!line.startsWith('#EXTINF:')) continue;
+        const seconds = Number(line.match(/^#EXTINF:([^,]+)/)?.[1]);
+        if (!Number.isFinite(seconds) || seconds <= 0) throw new UsageError('Unverifiable HLS segment duration; use --duration');
+        duration += seconds;
+        longestSegment = Math.max(longestSegment, seconds);
+      }
+      if (!duration || duration + longestSegment > 24 * 60 * 60) throw new UsageError('HLS duration cannot be bounded; use --duration');
+      maxDuration = Math.max(maxDuration, duration + longestSegment);
+    }
     for (const child of children) {
       const childUrl = new URL(child, response.url).href;
       assertHttpUrl(childUrl);
@@ -85,6 +99,8 @@ async function requireFiniteHls(url, headers, timeout, signal) {
       pending.push({ url: childUrl, depth: item.depth + 1, parents: new Set([...item.parents, item.url]) });
     }
   }
+  if (!maxDuration) throw new UsageError('HLS duration cannot be bounded; use --duration');
+  return Math.ceil(maxDuration);
 }
 
 async function runFfmpeg({ url, output, ffmpeg = 'ffmpeg', duration, headers, timeout, signal }) {
@@ -136,8 +152,9 @@ export async function download(options) {
       await head.body?.cancel();
     }
     if (['hls', 'dash'].includes(mode)) {
+      let duration = options.duration;
       if (!options.duration) {
-        if (mode === 'hls') await requireFiniteHls(url, headers, options.timeout || 30, controller.signal);
+        if (mode === 'hls') duration = await requireFiniteHls(url, headers, options.timeout || 30, controller.signal);
         else {
           const response = await request(url, headers, options.timeout || 30, controller.signal);
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -145,7 +162,7 @@ export async function download(options) {
           if (/<MPD\b[^>]*type=["']dynamic["']/i.test(text)) throw new UsageError('Live DASH requires --duration');
         }
       }
-      await runFfmpeg({ url, output: temp, ffmpeg: options.ffmpeg, duration: options.duration, headers, timeout: options.timeout || 30, signal: controller.signal });
+      await runFfmpeg({ url, output: temp, ffmpeg: options.ffmpeg, duration, headers, timeout: options.timeout || 30, signal: controller.signal });
     } else {
       const response = await request(url, headers, options.timeout || 30, controller.signal);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);

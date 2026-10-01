@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { download } from '../cli/download.js';
+import { download, requireFiniteHls } from '../cli/download.js';
 
 test('FFmpeg downloads and remuxes a real VOD HLS playlist', { skip: spawnSync('ffmpeg', ['-version']).status !== 0 }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'cat-hls-'));
@@ -41,5 +41,7 @@ test('master playlist with a live variant requires --duration before FFmpeg star
     await assert.rejects(download({ ...options, duration: 1 }), /Cannot start FFmpeg/);
     await assert.rejects(download({ ...options, url: options.url.replace('master.m3u8', 'master-vod.m3u8') }), /Cannot start FFmpeg/);
     await assert.rejects(download({ ...options, url: options.url.replace('master.m3u8', 'cycle.m3u8') }), /Cyclic HLS playlists require --duration/);
+    const boundedSeconds = await requireFiniteHls(options.url.replace('master.m3u8', 'master-vod.m3u8'), {}, 5, new AbortController().signal);
+    assert.equal(boundedSeconds, 2);
   } finally { server.close(); await rm(dir, { recursive: true, force: true }); }
 });
