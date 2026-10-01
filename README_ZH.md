@@ -70,6 +70,6 @@ cat-catch download "https://example.com/master.m3u8" -o video.mp4 --duration 60
 
 ## 限制
 
-登录网站需导入有效的 Playwright 会话或 Cookie；工具不会处理登录挑战。部分网站需要 `--click` 才开始播放。`blob:` 媒体需要找到底层可访问的网络请求。不支持 DRM 解密。签名 URL 可能过期。FFmpeg 只复制流，不转码，因此输出容器须兼容。直播 HLS/DASH 须指定 `--duration`。传给 FFmpeg 的显式或捕获请求头可能发送给清单及分片主机。
+登录网站需导入有效的 Playwright 会话或 Cookie；工具不会处理登录挑战。部分网站需要 `--click` 才开始播放。`blob:` 媒体需要找到底层可访问的网络请求。不支持 DRM 解密。签名 URL 可能过期。FFmpeg 只复制流，不转码，因此输出容器须兼容。直播 HLS/DASH 须指定 `--duration`。未指定时，HLS 会在启动 FFmpeg 前检查所有引用的清单是否已结束；无法确认、超过 1 MiB、循环引用或层级过深的清单须指定 `--duration`。传给 FFmpeg 的显式或捕获请求头可能发送给清单及分片主机。
 
 浏览器扩展仍可通过仓库中的 manifest 使用。猫抓采用 GPL-3.0 许可，见 [LICENSE](LICENSE)。

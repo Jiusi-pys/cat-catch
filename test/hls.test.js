@@ -23,3 +23,23 @@ test('FFmpeg downloads and remuxes a real VOD HLS playlist', { skip: spawnSync('
     assert.ok((await stat(output)).size > 0);
   } finally { server.close(); await rm(dir, { recursive: true, force: true }); }
 });
+
+test('master playlist with a live variant requires --duration before FFmpeg starts', async () => {
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    if (req.url === '/master.m3u8') res.end('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nvod.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2000\nlive.m3u8\n');
+    else if (req.url === '/master-vod.m3u8') res.end('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nvod.m3u8\n');
+    else if (req.url === '/cycle.m3u8') res.end('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\ncycle.m3u8\n');
+    else if (req.url === '/vod.m3u8') res.end('#EXTM3U\n#EXTINF:1,\nsegment.ts\n#EXT-X-ENDLIST\n');
+    else res.end('#EXTM3U\n#EXTINF:1,\nsegment.ts\n');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const dir = await mkdtemp(join(tmpdir(), 'cat-live-'));
+  const options = { url: `http://127.0.0.1:${server.address().port}/master.m3u8`, output: join(dir, 'out.ts'), mode: 'hls', headers: {}, timeout: 5, ffmpeg: '__missing_ffmpeg__' };
+  try {
+    await assert.rejects(download(options), /Live HLS requires --duration/);
+    await assert.rejects(download({ ...options, duration: 1 }), /Cannot start FFmpeg/);
+    await assert.rejects(download({ ...options, url: options.url.replace('master.m3u8', 'master-vod.m3u8') }), /Cannot start FFmpeg/);
+    await assert.rejects(download({ ...options, url: options.url.replace('master.m3u8', 'cycle.m3u8') }), /Cyclic HLS playlists require --duration/);
+  } finally { server.close(); await rm(dir, { recursive: true, force: true }); }
+});
