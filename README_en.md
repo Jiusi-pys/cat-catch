@@ -2,6 +2,8 @@
 
 # 📑Introduction
 
+For the terminal application, see the complete [English CLI reference](README.md) or [Chinese CLI reference](README_ZH.md).
+
 Cat-Catch is a resource sniffing extension that can help you filter and list the resources of the current page.
 
 # 📖Installation
