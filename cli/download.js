@@ -41,6 +41,52 @@ async function request(url, headers, timeout, signal, method = 'GET') {
   throw new Error('Too many redirects');
 }
 
+async function readPlaylist(response) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of Readable.fromWeb(response.body)) {
+    size += chunk.length;
+    if (size > 1024 * 1024) throw new UsageError('HLS playlist exceeds 1 MiB; use --duration');
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+async function requireFiniteHls(url, headers, timeout, signal) {
+  const pending = [{ url, depth: 0, parents: new Set() }];
+  const visited = new Set();
+  while (pending.length) {
+    const item = pending.shift();
+    if (visited.has(item.url)) continue;
+    if (visited.size >= 32 || item.depth > 8) throw new UsageError('HLS playlist graph is too large; use --duration');
+    visited.add(item.url);
+    const response = await request(item.url, headers, timeout, signal);
+    if (!response.ok) throw new Error(`HTTP ${response.status} reading HLS playlist`);
+    const lines = (await readPlaylist(response)).split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    if (lines[0] !== '#EXTM3U') throw new UsageError('Invalid HLS playlist');
+    const children = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.startsWith('#EXT-X-STREAM-INF:')) {
+        const next = lines[i + 1];
+        if (!next || next.startsWith('#')) throw new UsageError('Invalid HLS variant playlist');
+        children.push(next);
+        i++;
+      } else if (line.startsWith('#EXT-X-MEDIA:') || line.startsWith('#EXT-X-I-FRAME-STREAM-INF:')) {
+        const uri = line.match(/\bURI="([^"]+)"/i)?.[1];
+        if (uri) children.push(uri);
+      }
+    }
+    if (!children.length && !lines.includes('#EXT-X-ENDLIST')) throw new UsageError('Live HLS requires --duration');
+    for (const child of children) {
+      const childUrl = new URL(child, response.url).href;
+      assertHttpUrl(childUrl);
+      if (childUrl === item.url || item.parents.has(childUrl)) throw new UsageError('Cyclic HLS playlists require --duration');
+      pending.push({ url: childUrl, depth: item.depth + 1, parents: new Set([...item.parents, item.url]) });
+    }
+  }
+}
+
 async function runFfmpeg({ url, output, ffmpeg = 'ffmpeg', duration, headers, timeout, signal }) {
   const args = ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y', '-rw_timeout', String(timeout * 1e6)];
   if (headers['user-agent']) args.push('-user_agent', headers['user-agent']);
@@ -91,11 +137,13 @@ export async function download(options) {
     }
     if (['hls', 'dash'].includes(mode)) {
       if (!options.duration) {
-        const response = await request(url, headers, options.timeout || 30, controller.signal);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const text = await response.text();
-        if (mode === 'hls' && !text.includes('#EXT-X-ENDLIST') && !text.includes('#EXT-X-STREAM-INF')) throw new UsageError('Live HLS requires --duration');
-        if (mode === 'dash' && /<MPD\b[^>]*type=["']dynamic["']/i.test(text)) throw new UsageError('Live DASH requires --duration');
+        if (mode === 'hls') await requireFiniteHls(url, headers, options.timeout || 30, controller.signal);
+        else {
+          const response = await request(url, headers, options.timeout || 30, controller.signal);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const text = await response.text();
+          if (/<MPD\b[^>]*type=["']dynamic["']/i.test(text)) throw new UsageError('Live DASH requires --duration');
+        }
       }
       await runFfmpeg({ url, output: temp, ffmpeg: options.ffmpeg, duration: options.duration, headers, timeout: options.timeout || 30, signal: controller.signal });
     } else {
