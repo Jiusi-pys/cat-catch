@@ -5,3 +5,6 @@ dist/
 *.zip
 *.pem
 /.workbuddy/memory
+node_modules/
+.npm-cache/
+.playwright-browsers/

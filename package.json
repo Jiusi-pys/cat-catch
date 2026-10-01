@@ -1,0 +1,12 @@
+{
+  "name": "cat-catch-cli",
+  "version": "2.7.2",
+  "description": "Terminal media capture and download for Cat-Catch",
+  "type": "module",
+  "bin": { "cat-catch": "./cli/bin.js" },
+  "engines": { "node": ">=22" },
+  "scripts": { "test": "node --test" },
+  "dependencies": { "playwright": "^1.63.0" },
+  "files": [ "cli", "README.md", "README_ZH.md", "LICENSE" ],
+  "license": "GPL-3.0-only"
+}

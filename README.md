@@ -1,102 +1,75 @@
-<p align="center"> [中文] | [<a href="README_en.md">English</a>] | [<a href="README_es.md">Español</a>] | [<a href="README_ru.md">Русский</a>]</p>
+<p align="center">English | <a href="README_ZH.md">中文</a></p>
 
-# 📑简介
+# Cat-Catch CLI
 
-猫抓(cat-catch) 资源嗅探扩展，能够帮你筛选列出当前页面的资源。
+Capture media requests from websites with headless Chromium and download direct files, HLS, and DASH from a terminal. The original browser extension remains in this repository; see [its documentation](README_en.md). Use this software only for media you own or are authorized to download.
 
-# 📖安装地址
+## Installation
 
-## 🐴Chrome
+Requires Node.js 22 or newer. HLS/DASH downloads require FFmpeg on PATH (or `--ffmpeg`). From the repository root:
 
-https://chromewebstore.google.com/detail/cat-catch/jfedfbgedapdagkghmgibemcoggfppbb
+```powershell
+npm.cmd ci
+npx.cmd playwright install chromium
+npm.cmd link
+cat-catch --help
+```
 
-## 🦄Edge
+On PowerShell, `npm.cmd` and `npx.cmd` avoid execution policy errors with `.ps1` wrappers. Without `npm link`, run `node cli/bin.js` from the repository root. If Chromium is installed in a custom directory, set the same absolute `PLAYWRIGHT_BROWSERS_PATH` during installation and execution.
 
-https://microsoftedge.microsoft.com/addons/detail/oohmdefbjalncfplafanlagojlakmjci
+## Examples
 
-## 🦊Firefox
+```powershell
+cat-catch sniff "https://example.com/watch" --click ".play"
+cat-catch sniff "https://example.com/watch" --format json --include-headers -o capture.json
+cat-catch download --from capture.json --id 1 -o video.mp4
+cat-catch download "https://example.com/video.mp4" -o video.mp4
+cat-catch download "https://example.com/master.m3u8" -o video.mp4 --duration 60
+```
 
-https://addons.mozilla.org/addon/cat-catch/ 😂需非国区IP访问
+`cat-catch sniff <page-url> [options]` opens an HTTP(S) page, observes responses from frames and new pages, tries muted playback of media elements, and lists media. Empty results exit successfully.
 
-## 📱Edge Android
+| Sniff option | Meaning and default |
+|---|---|
+| `--wait <seconds>` | Collection time after navigation and clicks; default `15`, accepts `0`. |
+| `--format table\|json` | Result format; default `table`, columns ID, TYPE, SIZE, URL. |
+| `-o, --output <file>` | Write a new file rather than stdout; fails if it already exists. |
+| `--type <list>` | Comma separated `video,audio,hls,dash,other`; default all. |
+| `--match <regex>` | Keep URLs matching a JavaScript regular expression. |
+| `--max-results <count>` | Maximum unique results; default `1000`, positive integer. |
+| `--click <css-selector>` | Click a matching element in the main page; repeatable, in order. |
+| `--no-autoplay` | Skip the muted play attempt for `video`/`audio` elements. |
+| `--storage-state <file>` | Import Playwright storage state JSON; exclusive with `--cookies`. |
+| `--cookies <file>` | Import a JSON array of Playwright cookies; exclusive with `--storage-state`. |
+| `--include-headers` | Include request headers in JSON results, potentially including credentials. |
 
-<img src="https://raw.githubusercontent.com/xifangczy/cat-catch/master/README/edgeqrcode.png" width="20%" />
+`cat-catch download <media-url> -o <file> [options]` downloads an HTTP(S) URL. `cat-catch download --from <capture.json> --id <id> -o <file> [options]` selects one captured resource. The URL and `--from` are mutually exclusive; `--from` and `--id` must occur together.
 
-💔猫抓是开源的，任何人都可以下载修改上架到应用商店，已经有不少加上广告代码后上架的伪猫抓，请注意自己的数据安全。所有安装地址以github和用户文档为准。
+| Download option | Meaning and default |
+|---|---|
+| `-o, --output <file>` | Required destination; existing files are protected. |
+| `--from <capture.json>` | Load a schema version 1 capture file. |
+| `--id <id>` | Select a positive integer resource ID from that file. |
+| `--mode auto\|direct\|hls\|dash` | Method; default `auto`, selected by extension or MIME. |
+| `--overwrite` | Permit replacing an existing destination after success. |
+| `--ffmpeg <path>` | FFmpeg executable for HLS/DASH; default `ffmpeg`. |
+| `--duration <seconds>` | Bound HLS/DASH output; required for live playlists. |
 
-# 📒用户文档
+| Shared option | Meaning and default |
+|---|---|
+| `-H, --header "Name: value"` | Request header; repeatable, later values override earlier ones. |
+| `--referer <url>` | Referer header; overrides `-H Referer: ...`. |
+| `--user-agent <value>` | User-Agent header; overrides `-H User-Agent: ...`. |
+| `--timeout <seconds>` | Navigation/action or network timeout; default `30`, positive. It is not a total download limit. |
+| `-h, --help` | Show global or command help. |
+| `-V, --version` | Show package version. |
 
-https://cat-catch.94cat.com/
+Capture JSON has `schemaVersion: 1`, `pageUrl`, and `resources`. Each resource has `id`, `url`, `category`, `mimeType`, `filename`, `size` (bytes or `null`), and `pageUrl`. `headers` appears only with `--include-headers`. IDs are unique within a capture; signed URL query strings are preserved. For authenticated downloads, export a capture with `--include-headers` or pass headers explicitly. Treat session and capture files containing credentials as secrets.
 
-# 📘安装方法
+Results go to stdout; errors go to stderr. Exit status: `0` success, `1` operational/download failure, `2` invalid arguments or input files, `130` interruption.
 
-## 应用商店安装
+## Limits
 
-通过安装地址的链接到官方扩展商店即可安装。
+Import a valid Playwright session or cookies for login sites; the CLI does not solve login challenges. Site playback may require `--click`. `blob:` media requires an underlying accessible network request. DRM decryption is unsupported. Signed media URLs can expire. FFmpeg copies streams without transcoding, so choose a compatible output container. Live HLS/DASH requires `--duration`. Explicit or captured headers passed to FFmpeg may be sent to playlist and segment hosts.
 
-## 源码安装
-
-1. Git Clone 代码。
-2. 扩展管理页面 打开 "开发者模式"。
-3. 点击 "加载已解压的扩展程序" 选中扩展文件夹即可。
-
-## crx安装
-
-1. [Releases](https://github.com/xifangczy/cat-catch/releases) **右键另存为**下载crx文件。
-2. 扩展管理页面 打开 "开发者模式"。
-3. 将crx文件拖入扩展程序页面即可。
-
-# 📚兼容性说明
-
-1.0.17版本之后需要Chromium内核版本93以上。
-低于93请使用1.0.16版本。
-要体验完整功能，请使用104版本以上。
-
-# 🔍界面
-
-![popup界面](https://raw.githubusercontent.com/xifangczy/cat-catch/master/README/popup.png)
-![m3u8解析器界面](https://raw.githubusercontent.com/xifangczy/cat-catch/master/README/m3u8.png)
-
-# 🤚🏻免责
-
-本扩展仅供下载用户拥有版权或已获授权的视频，禁止用于下载受版权保护且未经授权的内容。用户需自行承担使用本工具的全部法律责任，开发者不对用户的任何行为负责。本工具按“原样”提供，开发者不承担任何直接或间接责任。
-
-# 🚫版权保护与拒绝抓取声明
-
-我们尊重所有网站的内容版权和运营方的合法权益。
-如果您不允许本工具运行在您的网站上，请遵循以下流程向我们提交请求，我们将会把您的域名加入本项目的“避免抓取列表”中。
-
-- 在本仓库创建一个新的 Issue
-- Issue 标题请使用格式： `[Opt-Out Request] 您的网站域名`
-
-在 Issue 正文中，请提供以下信息以便我们核实：
-
-- 网站域名：（例如：`example.com`）
-- 联系人邮箱：（用于必要时核实身份）
-
-我们承诺在收到有效请求后，将在后续版本更新中尊重您的意愿。请注意，本项目是一个开源项目，更新和发布需要一定的周期。感谢您的理解与合作。
-
-# 🔒隐私政策
-
-本扩展收集所有信息都在本地储存处理，不会发送到远程服务器，不包含任何跟踪器。
-
-# 💖鸣谢
-
-- [hls.js](https://github.com/video-dev/hls.js)
-- [jQuery](https://github.com/jquery/jquery)
-- [mux.js](https://github.com/videojs/mux.js)
-- [jquery.json-viewer](https://github.com/abodelot/jquery.json-viewer)
-- [Momo707577045](https://github.com/Momo707577045)
-- [mpd-parser](https://github.com/videojs/mpd-parser)
-- [StreamSaver.js](https://github.com/jimmywarting/StreamSaver.js)
-- [MQTT.js](https://github.com/mqttjs/MQTT.js)
-
-# 📜License
-
-GPL-3.0 license
-
-1.0版 使用 MIT许可
-
-2.0版 更改为GPL v3许可
-
-为了资源嗅探扩展有良好发展，希望使用猫抓源码的扩展仍然保持开源。
+The browser extension remains available through its manifests. Cat-Catch is licensed under GPL-3.0; see [LICENSE](LICENSE).
