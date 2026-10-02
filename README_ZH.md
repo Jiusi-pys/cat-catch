@@ -22,6 +22,7 @@ PowerShell 如果阻止 `.ps1`，请使用 `npm.cmd` 和 `npx.cmd`。不执行 `
 ```powershell
 cat-catch sniff "https://example.com/watch" --click ".play"
 cat-catch sniff "https://example.com/watch" --format json --include-headers -o capture.json
+cat-catch sniff "https://example.com/watch" --storage-state login.json
 cat-catch download --from capture.json --id 1 -o video.mp4
 cat-catch download "https://example.com/video.mp4" -o video.mp4
 cat-catch download "https://example.com/master.m3u8" -o video.mp4 --duration 60
@@ -68,8 +69,23 @@ cat-catch download "https://example.com/master.m3u8" -o video.mp4 --duration 60
 
 结果输出到标准输出，错误输出到标准错误。退出码：`0` 成功，`1` 运行或下载失败，`2` 参数或输入文件无效，`130` 被中断。
 
+## 登录
+
+工具本身不会登录网站。请在工具之外创建会话，再交给 `sniff` 使用；捕获到的媒体 URL 属于该会话，后续下载才能继续可用。
+
+仓库内附带的辅助脚本会打开一个有界面的 Chromium 窗口，等你登录完成后写入 Playwright 存储状态文件：
+
+```powershell
+node tools/login.js bilibili-login.json
+cat-catch sniff "https://www.bilibili.com/video/BV1Ria76WEFN/" --storage-state bilibili-login.json
+```
+
+`tools/login.js` 只针对 B 站，不是通用的登录命令：它轮询该站的 `SESSDATA` cookie，并通过其 nav 接口确认登录状态。该脚本不包含在发布的软件包中，需要克隆仓库，并已执行过 `npm ci` 以获取 Playwright。其他网站请自行导出会话。脚本生成的文件，以及任何用 `--include-headers` 写出的捕获文件，都含账号凭据，应按密钥保护，不要提交到仓库。
+
+不使用脚本时，可从浏览器导出 cookie 自行拼装：`--cookies` 接受 Playwright Cookie 的 JSON 数组，每项含 `name`、`value`、`domain`、`path`、`expires`、`httpOnly`、`secure` 和 `sameSite`（取值 `Strict`、`Lax` 或 `None`）。
+
 ## 限制
 
-登录网站需导入有效的 Playwright 会话或 Cookie；工具不会处理登录挑战。部分网站需要 `--click` 才开始播放。`blob:` 媒体需要找到底层可访问的网络请求。不支持 DRM 解密。签名 URL 可能过期。FFmpeg 只复制流，不转码，因此输出容器须兼容。直播 HLS/DASH 须指定 `--duration`。未指定时，HLS 会检查所有引用的清单是否已结束，并根据分片时长为 FFmpeg 设置媒体时长上限；无法确认、超过 1 MiB、循环引用、层级过深或超过 24 小时的清单须显式指定 `--duration`。传给 FFmpeg 的显式或捕获请求头可能发送给清单及分片主机。
+登录网站需导入有效的 Playwright 会话或 Cookie（见 [登录](#登录)）；工具不会处理登录挑战。部分网站需要 `--click` 才开始播放。`blob:` 媒体需要找到底层可访问的网络请求。不支持 DRM 解密。签名 URL 可能过期。FFmpeg 只复制流，不转码，因此输出容器须兼容。直播 HLS/DASH 须指定 `--duration`。未指定时，HLS 会检查所有引用的清单是否已结束，并根据分片时长为 FFmpeg 设置媒体时长上限；无法确认、超过 1 MiB、循环引用、层级过深或超过 24 小时的清单须显式指定 `--duration`。传给 FFmpeg 的显式或捕获请求头可能发送给清单及分片主机。
 
 浏览器扩展仍可通过仓库中的 manifest 使用。猫抓采用 GPL-3.0 许可，见 [LICENSE](LICENSE)。

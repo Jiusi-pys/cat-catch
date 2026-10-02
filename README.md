@@ -22,6 +22,7 @@ On PowerShell, `npm.cmd` and `npx.cmd` avoid execution policy errors with `.ps1`
 ```powershell
 cat-catch sniff "https://example.com/watch" --click ".play"
 cat-catch sniff "https://example.com/watch" --format json --include-headers -o capture.json
+cat-catch sniff "https://example.com/watch" --storage-state login.json
 cat-catch download --from capture.json --id 1 -o video.mp4
 cat-catch download "https://example.com/video.mp4" -o video.mp4
 cat-catch download "https://example.com/master.m3u8" -o video.mp4 --duration 60
@@ -68,8 +69,23 @@ Capture JSON has `schemaVersion: 1`, `pageUrl`, and `resources`. Each resource h
 
 Results go to stdout; errors go to stderr. Exit status: `0` success, `1` operational/download failure, `2` invalid arguments or input files, `130` interruption.
 
+## Authentication
+
+The CLI never signs in to a site. Import a session created outside the CLI and pass it to `sniff`; the captured media URLs then belong to that session, so the download keeps working.
+
+The repository includes a helper that opens a visible Chromium window, waits for you to sign in, and writes a Playwright storage state file:
+
+```powershell
+node tools/login.js bilibili-login.json
+cat-catch sniff "https://www.bilibili.com/video/BV1Ria76WEFN/" --storage-state bilibili-login.json
+```
+
+`tools/login.js` is a Bilibili-specific convenience, not a general sign-in command: it polls for that site's `SESSDATA` cookie and confirms the session through its nav API. It is not part of the published package and needs a repository checkout, plus a repository `npm ci` for Playwright. For other sites, export the session yourself. Its output and any capture written with `--include-headers` hold account credentials; treat them as secrets, and do not commit them.
+
+Without the helper, build the file from your browser's cookies: `--cookies` takes a JSON array of Playwright cookies, each with `name`, `value`, `domain`, `path`, `expires`, `httpOnly`, `secure`, and `sameSite` set to `Strict`, `Lax`, or `None`.
+
 ## Limits
 
-Import a valid Playwright session or cookies for login sites; the CLI does not solve login challenges. Site playback may require `--click`. `blob:` media requires an underlying accessible network request. DRM decryption is unsupported. Signed media URLs can expire. FFmpeg copies streams without transcoding, so choose a compatible output container. Live HLS/DASH requires `--duration`. Without it, HLS verifies all referenced playlists are finite and passes a media duration cap derived from their segments to FFmpeg. Unverified, oversized (over 1 MiB), cyclic, excessively deep, or over 24-hour playlists require an explicit `--duration`. Explicit or captured headers passed to FFmpeg may be sent to playlist and segment hosts.
+Import a valid Playwright session or cookies for login sites (see [Authentication](#authentication)); the CLI does not solve login challenges. Site playback may require `--click`. `blob:` media requires an underlying accessible network request. DRM decryption is unsupported. Signed media URLs can expire. FFmpeg copies streams without transcoding, so choose a compatible output container. Live HLS/DASH requires `--duration`. Without it, HLS verifies all referenced playlists are finite and passes a media duration cap derived from their segments to FFmpeg. Unverified, oversized (over 1 MiB), cyclic, excessively deep, or over 24-hour playlists require an explicit `--duration`. Explicit or captured headers passed to FFmpeg may be sent to playlist and segment hosts.
 
 The browser extension remains available through its manifests. Cat-Catch is licensed under GPL-3.0; see [LICENSE](LICENSE).
