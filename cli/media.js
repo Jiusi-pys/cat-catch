@@ -36,5 +36,8 @@ export function collectResource(seen, { url, mimeType = '', disposition = '', si
 
 export function sanitizeHeaders(headers) {
   const excluded = new Set(['host', 'content-length', 'range', 'connection', 'accept-encoding']);
-  return Object.fromEntries(Object.entries(headers || {}).filter(([name]) => !excluded.has(name.toLowerCase())));
+  return Object.fromEntries(Object.entries(headers || {}).filter(([name]) => {
+    const lower = name.toLowerCase();
+    return !lower.startsWith(':') && !excluded.has(lower);
+  }));
 }
